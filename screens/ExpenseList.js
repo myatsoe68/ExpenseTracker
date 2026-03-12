@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,10 @@ import {
   Animated,
   PanResponder,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { allTransactions } from '../data/mockData';
+import { listenToExpenses, deleteExpense } from '../services/expenseService';
 
 // Swipeable Item — Complex Component using PanResponder
 const SwipeableItem = ({ item, onDelete }) => {
@@ -40,10 +41,24 @@ const SwipeableItem = ({ item, onDelete }) => {
   ).current;
 
   const handleDelete = () => {
-    Alert.alert('Delete', `Delete "${item.name}"?`, [
+    Alert.alert('Delete', `Delete this expense?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => onDelete(item.id) },
     ]);
+  };
+
+  const handleEdit = () => {
+    navigation.navigate('EditExpense', { expense: item });
+  };
+
+  const formatTime = (createdAt) => {
+    if (!createdAt) return '';
+    try {
+      const date = createdAt.toDate();
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
   };
 
   return (
@@ -58,16 +73,16 @@ const SwipeableItem = ({ item, onDelete }) => {
         style={[styles.expenseItem, { transform: [{ translateX }] }]}
         {...panResponder.panHandlers}
       >
-        <View style={[styles.expenseIconBox, { backgroundColor: item.color }]}>
-          <Text style={styles.expenseIcon}>{item.icon}</Text>
+        <View style={styles.expenseIconBox}>
+          <Text style={styles.expenseIcon}>{item.categoryIcon || '💡'}</Text>
         </View>
         <View style={styles.expenseDetails}>
-          <Text style={styles.expenseName}>{item.name}</Text>
-          <Text style={styles.expenseCategory}>{item.category}</Text>
+          <Text style={styles.expenseName}>{item.category}</Text>
+          <Text style={styles.expenseCategory}>{item.note || 'No note'}</Text>
         </View>
         <View style={styles.expenseRight}>
           <Text style={styles.expenseAmount}>-${item.amount.toFixed(2)}</Text>
-          <Text style={styles.expenseTime}>{item.time}</Text>
+          <Text style={styles.expenseTime}>{formatTime(item.createdAt)}</Text>
         </View>
       </Animated.View>
     </View>
@@ -76,17 +91,51 @@ const SwipeableItem = ({ item, onDelete }) => {
 
 const ExpenseList = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const [transactions, setTransactions] = useState(allTransactions);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleDelete = (id) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  // Load real expenses from Firestore
+  useEffect(() => {
+    const unsubscribe = listenToExpenses((data) => {
+      setTransactions(data);
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Delete from Firestore
+  const handleDelete = async (id) => {
+    const result = await deleteExpense(id);
+    if (!result.success) {
+      Alert.alert('Error', 'Failed to delete expense');
+    }
   };
 
-  const grouped = transactions.reduce((acc, t) => {
-    if (!acc[t.group]) acc[t.group] = [];
-    acc[t.group].push(t);
-    return acc;
-  }, {});
+  // Group transactions by date
+  const groupByDate = (expenses) => {
+    return expenses.reduce((acc, t) => {
+      let group = 'Unknown';
+      if (t.createdAt) {
+        try {
+          const date = t.createdAt.toDate();
+          const today = new Date();
+          const yesterday = new Date();
+          yesterday.setDate(today.getDate() - 1);
+
+          if (date.toDateString() === today.toDateString()) group = 'Today';
+          else if (date.toDateString() === yesterday.toDateString()) group = 'Yesterday';
+          else group = date.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
+        } catch {
+          group = 'Unknown';
+        }
+      }
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(t);
+      return acc;
+    }, {});
+  };
+
+  const grouped = groupByDate(transactions);
 
   const groupTotals = Object.keys(grouped).reduce((acc, group) => {
     acc[group] = grouped[group].reduce((s, t) => s + t.amount, 0);
@@ -109,28 +158,31 @@ const ExpenseList = ({ navigation }) => {
         <Text style={styles.hintText}>← Swipe left on a transaction to delete</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {Object.keys(grouped).map((group) => (
-          <View key={group} style={styles.groupSection}>
-            <View style={styles.groupHeader}>
-              <Text style={styles.groupTitle}>{group}</Text>
-              <Text style={styles.groupTotal}>-${groupTotals[group].toFixed(2)}</Text>
+      {loading ? (
+        <ActivityIndicator color="#4ADE80" size="large" style={{ marginTop: 60 }} />
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
+          {transactions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📭</Text>
+              <Text style={styles.emptyText}>No transactions yet</Text>
             </View>
-            {grouped[group].map((item) => (
-              <SwipeableItem key={item.id} item={item} onDelete={handleDelete} />
-            ))}
-          </View>
-        ))}
-
-        {transactions.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📭</Text>
-            <Text style={styles.emptyText}>No transactions yet</Text>
-          </View>
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          ) : (
+            Object.keys(grouped).map((group) => (
+              <View key={group} style={styles.groupSection}>
+                <View style={styles.groupHeader}>
+                  <Text style={styles.groupTitle}>{group}</Text>
+                  <Text style={styles.groupTotal}>-${groupTotals[group].toFixed(2)}</Text>
+                </View>
+                {grouped[group].map((item) => (
+                  <SwipeableItem key={item.id} item={item} onDelete={handleDelete} />
+                ))}
+              </View>
+            ))
+          )}
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      )}
 
       {/* Bottom Nav */}
       <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 8 }]}>
@@ -205,6 +257,7 @@ const styles = StyleSheet.create({
   },
   expenseIconBox: {
     width: 48, height: 48, borderRadius: 14,
+    backgroundColor: '#1A3A1A',
     alignItems: 'center', justifyContent: 'center', marginRight: 14,
   },
   expenseIcon: { fontSize: 20 },
@@ -219,7 +272,7 @@ const styles = StyleSheet.create({
   emptyText: { color: '#6AAD6A', fontSize: 16 },
   bottomNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
-    backgroundColor: '#0D250D', paddingVertical: 12, paddingBottom: 24,
+    backgroundColor: '#0D250D', paddingVertical: 12,
     borderTopWidth: 1, borderTopColor: '#1A3A1A',
     position: 'absolute', bottom: 0, left: 0, right: 0,
   },

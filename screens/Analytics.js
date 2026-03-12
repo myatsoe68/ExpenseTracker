@@ -1,123 +1,136 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { analyticsData } from '../data/mockData';
+import { getAnalyticsSummary } from '../services/analyticsService';
 
-const { width } = Dimensions.get('window');
-const RING_SIZE = width * 0.62;
-const RING_BORDER = 38;
-
-// Donut chart built purely with React Native Views (no external library)
-const DonutChart = ({ categories, total, month }) => {
-  return (
-    <View style={styles.donutWrapper}>
-      <View style={[styles.ringOuter, { width: RING_SIZE, height: RING_SIZE, borderRadius: RING_SIZE / 2 }]}>
-        {categories.map((cat, i) => {
-          const startPct = categories.slice(0, i).reduce((s, c) => s + c.percentage, 0);
-          const startDeg = (startPct / 100) * 360 - 90;
-          return (
-            <View
-              key={cat.name}
-              style={{
-                position: 'absolute',
-                width: RING_SIZE,
-                height: RING_SIZE,
-                borderRadius: RING_SIZE / 2,
-                borderWidth: RING_BORDER,
-                borderTopColor: cat.color,
-                borderRightColor: cat.percentage > 25 ? cat.color : 'transparent',
-                borderBottomColor: cat.percentage > 50 ? cat.color : 'transparent',
-                borderLeftColor: cat.percentage > 75 ? cat.color : 'transparent',
-                transform: [{ rotate: `${startDeg}deg` }],
-                zIndex: categories.length - i,
-              }}
-            />
-          );
-        })}
-        {/* Inner white circle to create donut hole */}
-        <View
-          style={[
-            styles.ringInner,
-            {
-              width: RING_SIZE - RING_BORDER * 2 - 8,
-              height: RING_SIZE - RING_BORDER * 2 - 8,
-              borderRadius: (RING_SIZE - RING_BORDER * 2 - 8) / 2,
-            },
-          ]}
-        >
-          <Text style={styles.donutLabel}>TOTAL</Text>
-          <Text style={styles.donutAmount}>${total.toLocaleString()}</Text>
-          <Text style={styles.donutMonth}>{month}</Text>
-        </View>
-      </View>
-
-      {/* Color Legend */}
-      <View style={styles.legendRow}>
-        {categories.map((cat) => (
-          <View key={cat.name} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: cat.color }]} />
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
-
-const CategoryRow = ({ item, isSelected, onPress }) => (
-  <TouchableOpacity
-    style={[styles.categoryRow, isSelected && styles.categoryRowSelected]}
-    onPress={onPress}
-    activeOpacity={0.8}
-  >
-    <View style={[styles.categoryIcon, { backgroundColor: item.color + '33' }]}>
-      <Text style={styles.categoryIconText}>{item.icon}</Text>
-    </View>
-    <Text style={styles.categoryName}>{item.name}</Text>
-    <Text style={styles.categoryAmount}>${item.amount.toFixed(2)}</Text>
-  </TouchableOpacity>
-);
+const COLORS = ['#4ADE80', '#22D3EE', '#F59E0B', '#F87171', '#A78BFA', '#FB923C'];
 
 const Analytics = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const [selected, setSelected] = useState(null);
-  const { categories, total, month } = analyticsData;
+  const [summary, setSummary] = useState({ totalSpent: 0, byCategory: [], byMonth: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const data = await getAnalyticsSummary();
+      setSummary(data);
+      setLoading(false);
+    };
+    load();
+  }, []);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Spending Analysis</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle}>Analytics</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.chartSection}>
-          <DonutChart categories={categories} total={total} month={month} />
-        </View>
+      {loading ? (
+        <ActivityIndicator color="#4ADE80" size="large" style={{ marginTop: 60 }} />
+      ) : (
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
 
-        <View style={styles.breakdownSection}>
-          <Text style={styles.breakdownTitle}>Category Breakdown</Text>
-          {categories.map((cat, idx) => (
-            <CategoryRow
-              key={cat.name}
-              item={cat}
-              isSelected={selected === idx}
-              onPress={() => setSelected(idx === selected ? null : idx)}
-            />
-          ))}
-        </View>
+          {/* Total Spent Card */}
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>TOTAL SPENT</Text>
+            <Text style={styles.totalAmount}>${summary.totalSpent.toFixed(2)}</Text>
+            <Text style={styles.totalSub}>
+              Across {summary.byCategory.length} categories
+            </Text>
+          </View>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          {/* Spending by Category */}
+          <Text style={styles.sectionTitle}>Spending by Category</Text>
+
+          {summary.byCategory.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📊</Text>
+              <Text style={styles.emptyText}>No expenses yet</Text>
+            </View>
+          ) : (
+            summary.byCategory.map((cat, index) => {
+              const percentage = summary.totalSpent > 0
+                ? (cat.total / summary.totalSpent) * 100
+                : 0;
+              const color = COLORS[index % COLORS.length];
+              return (
+                <View key={cat.category} style={styles.categoryRow}>
+                  <View style={styles.categoryLeft}>
+                    <View style={[styles.categoryDot, { backgroundColor: color }]} />
+                    <Text style={styles.categoryIcon}>{cat.categoryIcon}</Text>
+                    <View>
+                      <Text style={styles.categoryName}>{cat.category}</Text>
+                      <Text style={styles.categoryCount}>{cat.count} transactions</Text>
+                    </View>
+                  </View>
+                  <View style={styles.categoryRight}>
+                    <Text style={styles.categoryAmount}>${cat.total.toFixed(2)}</Text>
+                    <Text style={styles.categoryPercent}>{percentage.toFixed(1)}%</Text>
+                  </View>
+                </View>
+              );
+            })
+          )}
+
+          {/* Progress Bars */}
+          {summary.byCategory.length > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Breakdown</Text>
+              {summary.byCategory.map((cat, index) => {
+                const percentage = summary.totalSpent > 0
+                  ? (cat.total / summary.totalSpent) * 100
+                  : 0;
+                const color = COLORS[index % COLORS.length];
+                return (
+                  <View key={cat.category} style={styles.progressRow}>
+                    <View style={styles.progressHeader}>
+                      <Text style={styles.progressLabel}>
+                        {cat.categoryIcon} {cat.category}
+                      </Text>
+                      <Text style={styles.progressValue}>{percentage.toFixed(1)}%</Text>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          { width: `${percentage}%`, backgroundColor: color },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </>
+          )}
+
+          {/* Monthly Breakdown */}
+          {summary.byMonth.length > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Monthly Spending</Text>
+              {summary.byMonth.map((month) => (
+                <View key={month.key} style={styles.monthRow}>
+                  <Text style={styles.monthLabel}>{month.label}</Text>
+                  <Text style={styles.monthAmount}>${month.total.toFixed(2)}</Text>
+                </View>
+              ))}
+            </>
+          )}
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+      )}
 
       {/* Bottom Nav */}
       <View style={[styles.bottomNav, { paddingBottom: insets.bottom + 8 }]}>
@@ -149,50 +162,57 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A1F0A' },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingHorizontal: 20,
-    paddingTop: 16, paddingBottom: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8,
   },
   backArrow: { color: '#FFFFFF', fontSize: 28, fontWeight: '400' },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
-  chartSection: { alignItems: 'center', paddingVertical: 24 },
-  donutWrapper: { alignItems: 'center' },
-  ringOuter: {
-    position: 'relative', alignItems: 'center', justifyContent: 'center',
+  scrollView: { flex: 1, paddingHorizontal: 20 },
+  totalCard: {
+    backgroundColor: '#122012', borderRadius: 20,
+    padding: 24, marginBottom: 28,
+    borderWidth: 1, borderColor: '#1E3A1E',
+    alignItems: 'center',
   },
-  ringInner: {
-    backgroundColor: '#0A1F0A', alignItems: 'center',
-    justifyContent: 'center', zIndex: 100,
-  },
-  donutLabel: {
-    color: '#4ADE80', fontSize: 11, fontWeight: '700',
-    letterSpacing: 2, marginBottom: 4,
-  },
-  donutAmount: { color: '#FFFFFF', fontSize: 26, fontWeight: '800' },
-  donutMonth: { color: '#6AAD6A', fontSize: 11, marginTop: 4 },
-  legendRow: { flexDirection: 'row', marginTop: 16, gap: 10 },
-  legendItem: { alignItems: 'center' },
-  legendDot: { width: 12, height: 12, borderRadius: 6 },
-  breakdownSection: { paddingHorizontal: 20 },
-  breakdownTitle: {
-    color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginBottom: 16,
-  },
+  totalLabel: { color: '#4ADE80', fontSize: 12, fontWeight: '700', letterSpacing: 1.5, marginBottom: 8 },
+  totalAmount: { color: '#4ADE80', fontSize: 48, fontWeight: '800', marginBottom: 4 },
+  totalSub: { color: '#6AAD6A', fontSize: 13 },
+  sectionTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 16 },
   categoryRow: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#122012', borderRadius: 16,
-    padding: 16, marginBottom: 12,
+    justifyContent: 'space-between',
+    backgroundColor: '#122012', borderRadius: 14,
+    padding: 16, marginBottom: 10,
     borderWidth: 1, borderColor: '#1E3A1E',
   },
-  categoryRowSelected: { borderColor: '#4ADE80' },
-  categoryIcon: {
-    width: 48, height: 48, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center', marginRight: 14,
+  categoryLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  categoryDot: { width: 10, height: 10, borderRadius: 5 },
+  categoryIcon: { fontSize: 20 },
+  categoryName: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  categoryCount: { color: '#6AAD6A', fontSize: 11, marginTop: 2 },
+  categoryRight: { alignItems: 'flex-end' },
+  categoryAmount: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  categoryPercent: { color: '#4ADE80', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  progressRow: { marginBottom: 14 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  progressLabel: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  progressValue: { color: '#4ADE80', fontSize: 13, fontWeight: '700' },
+  progressBarBg: { height: 8, backgroundColor: '#1E3A1E', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 4 },
+  monthRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    backgroundColor: '#122012', borderRadius: 12,
+    padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: '#1E3A1E',
   },
-  categoryIconText: { fontSize: 22 },
-  categoryName: { flex: 1, color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  categoryAmount: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  monthLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  monthAmount: { color: '#4ADE80', fontSize: 14, fontWeight: '700' },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyText: { color: '#6AAD6A', fontSize: 15 },
   bottomNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
-    backgroundColor: '#0D250D', paddingVertical: 12, paddingBottom: 24,
+    backgroundColor: '#0D250D', paddingVertical: 12,
     borderTopWidth: 1, borderTopColor: '#1A3A1A',
     position: 'absolute', bottom: 0, left: 0, right: 0,
   },

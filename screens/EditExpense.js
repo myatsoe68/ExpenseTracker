@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet,
+  TextInput, ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addExpense } from '../services/expenseService';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 const CATEGORIES = [
   { id: '1', label: 'Food', icon: '🍴' },
@@ -23,15 +18,16 @@ const CATEGORIES = [
 
 const NUMPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
-const AddExpense = ({ navigation }) => {
+const EditExpense = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const [amount, setAmount] = useState('0');
-  const [selectedCategory, setSelectedCategory] = useState('1');
-  const [note, setNote] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { expense } = route.params; // passed from ExpenseList
 
-  const today = new Date();
-  const dateLabel = `Today, ${today.toLocaleString('default', { month: 'short' })} ${today.getDate()}`;
+  const [amount, setAmount] = useState(expense.amount.toString());
+  const [note, setNote] = useState(expense.note || '');
+  const [selectedCategory, setSelectedCategory] = useState(
+    CATEGORIES.find((c) => c.label === expense.category)?.id || '1'
+  );
+  const [loading, setLoading] = useState(false);
 
   const handleNumpad = (key) => {
     if (key === '⌫') {
@@ -51,42 +47,46 @@ const AddExpense = ({ navigation }) => {
     }
   };
 
-  const handleAddExpense = async () => {
-  if (!amount || parseFloat(amount) === 0) {
-    Alert.alert('Error', 'Please enter a valid amount');
-    return;
-  }
-  setLoading(true);
-  const category = CATEGORIES.find((c) => c.id === selectedCategory);
-  const result = await addExpense(
-    amount,
-    category.label,
-    category.icon,
-    note
-  );
-  setLoading(false);
-  if (result.success) {
-    Alert.alert('Success', 'Expense added!', [
-      { text: 'OK', onPress: () => navigation.navigate('Home') },
-    ]);
-  } else {
-    Alert.alert('Error', result.error);
-  }
-};
+  const handleSave = async () => {
+    if (!amount || parseFloat(amount) === 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+    setLoading(true);
+    try {
+      const category = CATEGORIES.find((c) => c.id === selectedCategory);
+      await updateDoc(doc(db, 'expenses', expense.id), {
+        amount: parseFloat(amount),
+        category: category.label,
+        categoryIcon: category.icon,
+        note: note,
+      });
+      Alert.alert('Success', 'Expense updated!', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.headerClose}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add New Expense</Text>
-        <TouchableOpacity onPress={handleAddExpense}>
+        <Text style={styles.headerTitle}>Edit Expense</Text>
+        <TouchableOpacity onPress={handleSave}>
           <Text style={styles.headerCheck}>✓</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+        {/* Amount */}
         <View style={styles.amountSection}>
           <Text style={styles.amountLabel}>AMOUNT</Text>
           <View style={styles.amountRow}>
@@ -95,6 +95,7 @@ const AddExpense = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Category */}
         <View style={styles.categorySection}>
           <Text style={styles.sectionLabel}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
@@ -113,24 +114,18 @@ const AddExpense = ({ navigation }) => {
           </ScrollView>
         </View>
 
-        <TouchableOpacity style={styles.dateRow}>
-          <View style={styles.dateLeft}>
-            <Text style={styles.dateIcon}>📅</Text>
-            <Text style={styles.dateText}>Transaction Date</Text>
-          </View>
-          <Text style={styles.dateValue}>{dateLabel}</Text>
-        </TouchableOpacity>
-
+        {/* Note */}
         <View style={styles.noteContainer}>
           <TextInput
             style={styles.noteInput}
-            placeholder="Add a note (e.g. Lunch with Sarah)"
+            placeholder="Add a note"
             placeholderTextColor="#4A7A44"
             value={note}
             onChangeText={setNote}
           />
         </View>
 
+        {/* Numpad */}
         <View style={styles.numpad}>
           {NUMPAD_KEYS.map((key, index) => (
             <TouchableOpacity
@@ -144,11 +139,12 @@ const AddExpense = ({ navigation }) => {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={handleAddExpense} disabled={loading}>
+        {/* Save Button */}
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
           {loading ? (
             <ActivityIndicator color="#0A1F0A" />
           ) : (
-            <Text style={styles.addButtonText}>Add Expense  ⊕</Text>
+            <Text style={styles.saveButtonText}>Save Changes ✓</Text>
           )}
         </TouchableOpacity>
 
@@ -162,8 +158,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A1F0A' },
   header: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingHorizontal: 20,
-    paddingTop: 16, paddingBottom: 8,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8,
   },
   headerClose: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
@@ -187,16 +183,6 @@ const styles = StyleSheet.create({
   categoryChipIcon: { fontSize: 16, marginRight: 6 },
   categoryChipText: { color: '#6AAD6A', fontSize: 14, fontWeight: '600' },
   categoryChipTextActive: { color: '#0A1F0A' },
-  dateRow: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', backgroundColor: '#122012',
-    borderRadius: 14, padding: 16, marginBottom: 12,
-    borderWidth: 1, borderColor: '#1E3A1E',
-  },
-  dateLeft: { flexDirection: 'row', alignItems: 'center' },
-  dateIcon: { fontSize: 18, marginRight: 10 },
-  dateText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  dateValue: { color: '#4ADE80', fontSize: 14, fontWeight: '700' },
   noteContainer: {
     backgroundColor: '#122012', borderRadius: 14,
     borderWidth: 1, borderColor: '#1E3A1E',
@@ -212,13 +198,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#1E3A1E',
   },
   numpadKeyText: { color: '#FFFFFF', fontSize: 22, fontWeight: '600' },
-  addButton: {
+  saveButton: {
     backgroundColor: '#4ADE80', borderRadius: 16,
     height: 58, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#4ADE80', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
   },
-  addButtonText: { color: '#0A1F0A', fontSize: 17, fontWeight: '800' },
+  saveButtonText: { color: '#0A1F0A', fontSize: 17, fontWeight: '800' },
 });
 
-export default AddExpense;
+export default EditExpense;
