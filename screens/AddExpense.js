@@ -1,34 +1,25 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { addExpense } from '../services/expenseService';
-
-const CATEGORIES = [
-  { id: '1', label: 'Food', icon: '🍴' },
-  { id: '2', label: 'Transport', icon: '🚌' },
-  { id: '3', label: 'Shopping', icon: '🛍' },
-  { id: '4', label: 'Education', icon: '📚' },
-  { id: '5', label: 'Health', icon: '💊' },
-  { id: '6', label: 'Other', icon: '💡' },
-];
+import { addExpense, listenToActiveCategories } from '../services/expenseService';
 
 const NUMPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
 const AddExpense = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [amount, setAmount] = useState('0');
-  const [selectedCategory, setSelectedCategory] = useState('1');
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    const unsubscribe = listenToActiveCategories((data) => {
+      setCategories(data);
+      if (data.length > 0) setSelectedCategory(data[0].id);
+    });
+    return unsubscribe;
+  }, []);
 
   const today = new Date();
   const dateLabel = `Today, ${today.toLocaleString('default', { month: 'short' })} ${today.getDate()}`;
@@ -52,27 +43,31 @@ const AddExpense = ({ navigation }) => {
   };
 
   const handleAddExpense = async () => {
-  if (!amount || parseFloat(amount) === 0) {
-    Alert.alert('Error', 'Please enter a valid amount');
-    return;
-  }
-  setLoading(true);
-  const category = CATEGORIES.find((c) => c.id === selectedCategory);
-  const result = await addExpense(
-    amount,
-    category.label,
-    category.icon,
-    note
-  );
-  setLoading(false);
-  if (result.success) {
-    Alert.alert('Success', 'Expense added!', [
-      { text: 'OK', onPress: () => navigation.navigate('Home') },
-    ]);
-  } else {
-    Alert.alert('Error', result.error);
-  }
-};
+    if (!amount || parseFloat(amount) === 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+    setLoading(true);
+    const category = categories.find((c) => c.id === selectedCategory);
+    const result = await addExpense(
+      amount,
+      category?.label || 'Other',
+      category?.icon || '💡',
+      note
+    );
+    setLoading(false);
+    if (result.success) {
+      if (Platform.OS === 'web') {
+        navigation.replace('Home');
+      } else {
+        Alert.alert('Success', 'Expense added!', [
+          { text: 'OK', onPress: () => navigation.navigate('Home') },
+        ]);
+      }
+    } else {
+      Alert.alert('Error', result.error);
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -98,7 +93,7 @@ const AddExpense = ({ navigation }) => {
         <View style={styles.categorySection}>
           <Text style={styles.sectionLabel}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 style={[styles.categoryChip, selectedCategory === cat.id && styles.categoryChipActive]}
@@ -168,7 +163,7 @@ const styles = StyleSheet.create({
   headerClose: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   headerCheck: { color: '#4ADE80', fontSize: 22, fontWeight: '700' },
-  scrollView: { flex: 1, paddingHorizontal: 20 },
+  scrollView: { flex: 1, paddingHorizontal: 20, maxWidth: 480, alignSelf: 'center', width: '100%' },
   amountSection: { alignItems: 'center', paddingVertical: 24 },
   amountLabel: { color: '#4ADE80', fontSize: 12, fontWeight: '700', letterSpacing: 2, marginBottom: 12 },
   amountRow: { flexDirection: 'row', alignItems: 'flex-start' },
@@ -204,14 +199,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center', marginBottom: 20,
   },
   noteInput: { color: '#FFFFFF', fontSize: 14 },
-  numpad: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  numpad: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: 8, marginBottom: 20,
+    maxWidth: 360, alignSelf: 'center', width: '100%',
+  },
   numpadKey: {
-    width: '30%', aspectRatio: 1.6,
-    backgroundColor: '#122012', borderRadius: 14,
+    width: '30%', height: 56,
+    backgroundColor: '#122012', borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: '#1E3A1E',
   },
-  numpadKeyText: { color: '#FFFFFF', fontSize: 22, fontWeight: '600' },
+  numpadKeyText: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
   addButton: {
     backgroundColor: '#4ADE80', borderRadius: 16,
     height: 58, alignItems: 'center', justifyContent: 'center',

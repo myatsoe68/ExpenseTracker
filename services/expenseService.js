@@ -59,9 +59,13 @@ export const listenToRecentExpenses = (callback, limitCount = 5) => {
 // Delete an expense
 export const deleteExpense = async (expenseId) => {
   try {
+    console.log('Deleting:', expenseId);
+    console.log('User:', auth.currentUser?.uid);
     await deleteDoc(doc(db, 'expenses', expenseId));
+    console.log('Deleted successfully!');
     return { success: true };
   } catch (error) {
+    console.log('Error:', error.code, error.message);
     return { success: false, error: error.message };
   }
 };
@@ -82,4 +86,16 @@ export const getExpenses = async () => {
   } catch (error) {
     return [];
   }
+};
+
+// Get active categories for current user
+export const listenToActiveCategories = (callback) => {
+  const userId = auth.currentUser.uid;
+  const ref = collection(db, 'users', userId, 'categories');
+  return onSnapshot(ref, (snapshot) => {
+    const data = snapshot.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((c) => c.active === true);
+    callback(data);
+  });
 };

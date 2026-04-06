@@ -9,11 +9,44 @@ import {
   PanResponder,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { listenToExpenses, deleteExpense } from '../services/expenseService';
 
-// Swipeable Item — Complex Component using PanResponder
+// Web-friendly item with visible delete button
+const WebExpenseItem = ({ item, onDelete }) => {
+  const formatTime = (createdAt) => {
+    if (!createdAt) return '';
+    try {
+      return createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  };
+
+  return (
+    <View style={styles.expenseItem}>
+      <View style={styles.expenseIconBox}>
+        <Text style={styles.expenseIcon}>{item.categoryIcon || '💡'}</Text>
+      </View>
+      <View style={styles.expenseDetails}>
+        <Text style={styles.expenseName}>{item.category}</Text>
+        <Text style={styles.expenseCategory}>{item.note || 'No note'}</Text>
+      </View>
+      <View style={styles.expenseRight}>
+        <Text style={styles.expenseAmount}>-${item.amount.toFixed(2)}</Text>
+        <Text style={styles.expenseTime}>{formatTime(item.createdAt)}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.webDeleteBtn}
+        onPress={() => onDelete(item.id)}
+      >
+        <Text style={styles.webDeleteIcon}>🗑</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Mobile swipeable item
 const SwipeableItem = ({ item, onDelete }) => {
   const translateX = useRef(new Animated.Value(0)).current;
   const deleteOpacity = useRef(new Animated.Value(0)).current;
@@ -40,31 +73,28 @@ const SwipeableItem = ({ item, onDelete }) => {
     })
   ).current;
 
-  const handleDelete = () => {
-    Alert.alert('Delete', `Delete this expense?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => onDelete(item.id) },
-    ]);
-  };
-
-  const handleEdit = () => {
-    navigation.navigate('EditExpense', { expense: item });
-  };
-
   const formatTime = (createdAt) => {
     if (!createdAt) return '';
     try {
-      const date = createdAt.toDate();
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return '';
-    }
+      return createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
   };
 
   return (
     <View style={styles.swipeContainer}>
       <Animated.View style={[styles.deleteBackground, { opacity: deleteOpacity }]}>
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={() => {
+            Alert.alert('Delete', 'Delete this expense?', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete', style: 'destructive',
+                onPress: () => onDelete(item.id)
+              },
+            ]);
+          }}
+        >
           <Text style={styles.deleteIcon}>🗑</Text>
         </TouchableOpacity>
       </Animated.View>
@@ -94,7 +124,6 @@ const ExpenseList = ({ navigation }) => {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load real expenses from Firestore
   useEffect(() => {
     const unsubscribe = listenToExpenses((data) => {
       setTransactions(data);
@@ -103,15 +132,31 @@ const ExpenseList = ({ navigation }) => {
     return unsubscribe;
   }, []);
 
-  // Delete from Firestore
   const handleDelete = async (id) => {
-    const result = await deleteExpense(id);
-    if (!result.success) {
-      Alert.alert('Error', 'Failed to delete expense');
+    if (Platform.OS === 'web') {
+      // Web: no Alert.alert, use window.confirm instead
+      const confirmed = window.confirm('Delete this expense?');
+      if (!confirmed) return;
+      const result = await deleteExpense(id);
+      if (!result.success) {
+        window.alert('Failed to delete expense');
+      }
+    } else {
+      Alert.alert('Delete', 'Delete this expense?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            const result = await deleteExpense(id);
+            if (!result.success) {
+              Alert.alert('Error', 'Failed to delete expense');
+            }
+          }
+        },
+      ]);
     }
   };
 
-  // Group transactions by date
   const groupByDate = (expenses) => {
     return expenses.reduce((acc, t) => {
       let group = 'Unknown';
@@ -121,13 +166,10 @@ const ExpenseList = ({ navigation }) => {
           const today = new Date();
           const yesterday = new Date();
           yesterday.setDate(today.getDate() - 1);
-
           if (date.toDateString() === today.toDateString()) group = 'Today';
           else if (date.toDateString() === yesterday.toDateString()) group = 'Yesterday';
           else group = date.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
-        } catch {
-          group = 'Unknown';
-        }
+        } catch { group = 'Unknown'; }
       }
       if (!acc[group]) acc[group] = [];
       acc[group].push(t);
@@ -136,7 +178,6 @@ const ExpenseList = ({ navigation }) => {
   };
 
   const grouped = groupByDate(transactions);
-
   const groupTotals = Object.keys(grouped).reduce((acc, group) => {
     acc[group] = grouped[group].reduce((s, t) => s + t.amount, 0);
     return acc;
@@ -155,7 +196,9 @@ const ExpenseList = ({ navigation }) => {
       </View>
 
       <View style={styles.hintBar}>
-        <Text style={styles.hintText}>← Swipe left on a transaction to delete</Text>
+        <Text style={styles.hintText}>
+          {Platform.OS === 'web' ? '🗑 Tap the trash icon to delete' : '← Swipe left on a transaction to delete'}
+        </Text>
       </View>
 
       {loading ? (
@@ -174,9 +217,13 @@ const ExpenseList = ({ navigation }) => {
                   <Text style={styles.groupTitle}>{group}</Text>
                   <Text style={styles.groupTotal}>-${groupTotals[group].toFixed(2)}</Text>
                 </View>
-                {grouped[group].map((item) => (
-                  <SwipeableItem key={item.id} item={item} onDelete={handleDelete} />
-                ))}
+                {grouped[group].map((item) =>
+                  Platform.OS === 'web' ? (
+                    <WebExpenseItem key={item.id} item={item} onDelete={handleDelete} />
+                  ) : (
+                    <SwipeableItem key={item.id} item={item} onDelete={handleDelete} />
+                  )
+                )}
               </View>
             ))
           )}
@@ -213,12 +260,9 @@ const ExpenseList = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A1F0A' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8,
   },
   backArrow: { color: '#FFFFFF', fontSize: 28, fontWeight: '400' },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
@@ -253,7 +297,7 @@ const styles = StyleSheet.create({
   expenseItem: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#122012', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: '#1E3A1E',
+    borderWidth: 1, borderColor: '#1E3A1E', marginBottom: 12,
   },
   expenseIconBox: {
     width: 48, height: 48, borderRadius: 14,
@@ -267,6 +311,12 @@ const styles = StyleSheet.create({
   expenseRight: { alignItems: 'flex-end' },
   expenseAmount: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginBottom: 4 },
   expenseTime: { color: '#6AAD6A', fontSize: 12 },
+  webDeleteBtn: {
+    marginLeft: 12, backgroundColor: 'rgba(239,68,68,0.15)',
+    borderRadius: 10, padding: 8,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  webDeleteIcon: { fontSize: 16 },
   emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyText: { color: '#6AAD6A', fontSize: 16 },
@@ -290,4 +340,4 @@ const styles = StyleSheet.create({
   addButtonText: { color: '#0A1F0A', fontSize: 28, fontWeight: '800', lineHeight: 32 },
 });
 
-export default ExpenseList;
+export default ExpenseList; 

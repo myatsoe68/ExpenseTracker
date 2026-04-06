@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   TextInput, ScrollView, Alert, ActivityIndicator,
@@ -6,28 +6,30 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
-
-const CATEGORIES = [
-  { id: '1', label: 'Food', icon: '🍴' },
-  { id: '2', label: 'Transport', icon: '🚌' },
-  { id: '3', label: 'Shopping', icon: '🛍' },
-  { id: '4', label: 'Education', icon: '📚' },
-  { id: '5', label: 'Health', icon: '💊' },
-  { id: '6', label: 'Other', icon: '💡' },
-];
+import { listenToActiveCategories } from '../services/expenseService';
 
 const NUMPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
 
 const EditExpense = ({ navigation, route }) => {
   const insets = useSafeAreaInsets();
-  const { expense } = route.params; // passed from ExpenseList
+  const { expense } = route.params;
 
   const [amount, setAmount] = useState(expense.amount.toString());
   const [note, setNote] = useState(expense.note || '');
-  const [selectedCategory, setSelectedCategory] = useState(
-    CATEGORIES.find((c) => c.label === expense.category)?.id || '1'
-  );
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState([]);
+
+  useEffect(() => {
+    const unsubscribe = listenToActiveCategories((data) => {
+      setCategories(data);
+      // Set selected to match current expense category
+      const match = data.find((c) => c.label === expense.category);
+      if (match) setSelectedCategory(match.id);
+      else if (data.length > 0) setSelectedCategory(data[0].id);
+    });
+    return unsubscribe;
+  }, []);
 
   const handleNumpad = (key) => {
     if (key === '⌫') {
@@ -54,11 +56,11 @@ const EditExpense = ({ navigation, route }) => {
     }
     setLoading(true);
     try {
-      const category = CATEGORIES.find((c) => c.id === selectedCategory);
+      const category = categories.find((c) => c.id === selectedCategory);
       await updateDoc(doc(db, 'expenses', expense.id), {
         amount: parseFloat(amount),
-        category: category.label,
-        categoryIcon: category.icon,
+        category: category?.label || 'Other',
+        categoryIcon: category?.icon || '💡',
         note: note,
       });
       Alert.alert('Success', 'Expense updated!', [
@@ -73,7 +75,6 @@ const EditExpense = ({ navigation, route }) => {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.headerClose}>✕</Text>
@@ -86,7 +87,6 @@ const EditExpense = ({ navigation, route }) => {
 
       <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-        {/* Amount */}
         <View style={styles.amountSection}>
           <Text style={styles.amountLabel}>AMOUNT</Text>
           <View style={styles.amountRow}>
@@ -95,11 +95,10 @@ const EditExpense = ({ navigation, route }) => {
           </View>
         </View>
 
-        {/* Category */}
         <View style={styles.categorySection}>
           <Text style={styles.sectionLabel}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <TouchableOpacity
                 key={cat.id}
                 style={[styles.categoryChip, selectedCategory === cat.id && styles.categoryChipActive]}
@@ -114,7 +113,6 @@ const EditExpense = ({ navigation, route }) => {
           </ScrollView>
         </View>
 
-        {/* Note */}
         <View style={styles.noteContainer}>
           <TextInput
             style={styles.noteInput}
@@ -125,7 +123,6 @@ const EditExpense = ({ navigation, route }) => {
           />
         </View>
 
-        {/* Numpad */}
         <View style={styles.numpad}>
           {NUMPAD_KEYS.map((key, index) => (
             <TouchableOpacity
@@ -139,7 +136,6 @@ const EditExpense = ({ navigation, route }) => {
           ))}
         </View>
 
-        {/* Save Button */}
         <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
           {loading ? (
             <ActivityIndicator color="#0A1F0A" />
@@ -164,7 +160,7 @@ const styles = StyleSheet.create({
   headerClose: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
   headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   headerCheck: { color: '#4ADE80', fontSize: 22, fontWeight: '700' },
-  scrollView: { flex: 1, paddingHorizontal: 20 },
+  scrollView: { flex: 1, paddingHorizontal: 20, maxWidth: 480, alignSelf: 'center', width: '100%' },
   amountSection: { alignItems: 'center', paddingVertical: 24 },
   amountLabel: { color: '#4ADE80', fontSize: 12, fontWeight: '700', letterSpacing: 2, marginBottom: 12 },
   amountRow: { flexDirection: 'row', alignItems: 'flex-start' },
@@ -190,14 +186,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center', marginBottom: 20,
   },
   noteInput: { color: '#FFFFFF', fontSize: 14 },
-  numpad: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  numpad: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    gap: 8, marginBottom: 20,
+    maxWidth: 360, alignSelf: 'center', width: '100%',
+  },
   numpadKey: {
-    width: '30%', aspectRatio: 1.6,
-    backgroundColor: '#122012', borderRadius: 14,
+    width: '30%', height: 56,
+    backgroundColor: '#122012', borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: '#1E3A1E',
   },
-  numpadKeyText: { color: '#FFFFFF', fontSize: 22, fontWeight: '600' },
+  numpadKeyText: { color: '#FFFFFF', fontSize: 18, fontWeight: '600' },
   saveButton: {
     backgroundColor: '#4ADE80', borderRadius: 16,
     height: 58, alignItems: 'center', justifyContent: 'center',
