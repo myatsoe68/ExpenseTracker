@@ -133,28 +133,19 @@ const ExpenseList = ({ navigation }) => {
   }, []);
 
   const handleDelete = async (id) => {
-    if (Platform.OS === 'web') {
-      // Web: no Alert.alert, use window.confirm instead
-      const confirmed = window.confirm('Delete this expense?');
-      if (!confirmed) return;
-      const result = await deleteExpense(id);
-      if (!result.success) {
-        window.alert('Failed to delete expense');
-      }
-    } else {
-      Alert.alert('Delete', 'Delete this expense?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => {
-            const result = await deleteExpense(id);
-            if (!result.success) {
-              Alert.alert('Error', 'Failed to delete expense');
-            }
+    Alert.alert('Delete', 'Delete this expense?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await deleteExpense(id);
+          if (!result.success) {
+            Alert.alert('Error', 'Failed to delete expense');
           }
-        },
-      ]);
-    }
+        }
+      },
+    ]);
   };
 
   const groupByDate = (expenses) => {
