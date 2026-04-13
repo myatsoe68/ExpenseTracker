@@ -85,15 +85,7 @@ const SwipeableItem = ({ item, onDelete }) => {
       <Animated.View style={[styles.deleteBackground, { opacity: deleteOpacity }]}>
         <TouchableOpacity
           style={styles.deleteBtn}
-          onPress={() => {
-            Alert.alert('Delete', 'Delete this expense?', [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete', style: 'destructive',
-                onPress: () => onDelete(item.id)
-              },
-            ]);
-          }}
+          onPress={() => onDelete(item.id)}
         >
           <Text style={styles.deleteIcon}>🗑</Text>
         </TouchableOpacity>

@@ -56,18 +56,20 @@ const Home = ({ navigation }) => {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
 
         <View style={styles.topBar}>
-          <View>
-            <Text style={styles.welcomeText} numberOfLines={1}>
+          <View style={styles.topBarLeft}>
+            <Text style={styles.welcomeText} numberOfLines={1} ellipsizeMode="tail">
               Welcome, {userName}!
             </Text>
             <Text style={styles.welcomeSubtext}>Your finances are looking healthy</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-            <Text style={{ color: '#4ADE80', fontSize: 20 }}>👤</Text>
-          </TouchableOpacity>
+          <View style={styles.topBarRight}>
+            <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+              <Text style={{ color: '#4ADE80', fontSize: 20 }}>👤</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.budgetCard}>
@@ -151,9 +153,19 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1, paddingHorizontal: 20 },
   topBar: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingTop: 20, marginBottom: 24, gap: 10,
+    alignItems: 'center', paddingTop: 20, marginBottom: 24,
   },
-  welcomeText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800',flexShrink: 1 },
+  topBarLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  topBarRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  welcomeText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', flexShrink: 1 },
   welcomeSubtext: { color: '#6AAD6A', fontSize: 13, marginTop: 2 },
   logoutButton: {
     backgroundColor: '#1A3A1A', paddingHorizontal: 14,
