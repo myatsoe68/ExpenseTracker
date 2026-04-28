@@ -143,7 +143,10 @@ const AddExpense = ({ navigation }) => {
           {loading ? (
             <ActivityIndicator color="#0A1F0A" />
           ) : (
-            <Text style={styles.addButtonText}>Add Expense  ⊕</Text>
+            <View style={styles.addButtonContent}>
+              <Text style={styles.addButtonText}>Add Expense</Text>
+              <Text style={styles.addButtonIcon}>＋</Text>
+            </View>
           )}
         </TouchableOpacity>
 
@@ -217,7 +220,16 @@ const styles = StyleSheet.create({
     shadowColor: '#4ADE80', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
   },
+  addButtonContent: { flexDirection: 'row', alignItems: 'center' },
   addButtonText: { color: '#0A1F0A', fontSize: 17, fontWeight: '800' },
+  addButtonIcon: {
+    color: '#0A1F0A',
+    fontSize: 18,
+    fontWeight: '900',
+    marginLeft: 8,
+    lineHeight: 18,
+    includeFontPadding: false,
+  },
 });
 
 export default AddExpense;

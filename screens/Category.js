@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Switch, Alert, TextInput, ActivityIndicator,
+  StyleSheet, Switch, Alert, TextInput, ActivityIndicator, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -80,6 +80,16 @@ const Category = ({ navigation }) => {
 
   // Delete category
   const handleDelete = (cat) => {
+    if (Platform.OS === 'web') {
+      const shouldDelete = window.confirm(`Delete "${cat.label}"?`);
+      if (!shouldDelete) return;
+      (async () => {
+        const userId = auth.currentUser.uid;
+        await deleteDoc(doc(db, 'users', userId, 'categories', cat.id));
+      })();
+      return;
+    }
+
     Alert.alert('Delete', `Delete "${cat.label}"?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -278,8 +288,16 @@ const styles = StyleSheet.create({
   categoryIcon: { fontSize: 22 },
   categoryLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   categoryRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  deleteBtn: { padding: 4 },
-  deleteText: { fontSize: 16 },
+  deleteBtn: {
+    padding: 8,
+    minWidth: 40,
+    minHeight: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+  },
+  deleteText: { fontSize: 18 },
   bottomNav: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
     backgroundColor: '#0D250D', paddingVertical: 12,

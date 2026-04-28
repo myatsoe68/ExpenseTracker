@@ -124,20 +124,31 @@ const ExpenseList = ({ navigation }) => {
     return unsubscribe;
   }, []);
 
-  const handleDelete = async (id) => {
-    Alert.alert('Delete', 'Delete this expense?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          const result = await deleteExpense(id);
-          if (!result.success) {
-            Alert.alert('Error', 'Failed to delete expense');
-          }
-        }
-      },
-    ]);
+  const confirmDelete = async (id) => {
+    if (Platform.OS === 'web') {
+      const shouldDelete = window.confirm('Delete this expense?');
+      if (!shouldDelete) return;
+    } else {
+      Alert.alert('Delete', 'Delete this expense?', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await deleteExpense(id);
+            if (!result.success) {
+              Alert.alert('Error', 'Failed to delete expense');
+            }
+          },
+        },
+      ]);
+      return;
+    }
+
+    const result = await deleteExpense(id);
+    if (!result.success) {
+      Alert.alert('Error', 'Failed to delete expense');
+    }
   };
 
   const groupByDate = (expenses) => {
@@ -202,9 +213,9 @@ const ExpenseList = ({ navigation }) => {
                 </View>
                 {grouped[group].map((item) =>
                   Platform.OS === 'web' ? (
-                    <WebExpenseItem key={item.id} item={item} onDelete={handleDelete} />
+                    <WebExpenseItem key={item.id} item={item} onDelete={confirmDelete} />
                   ) : (
-                    <SwipeableItem key={item.id} item={item} onDelete={handleDelete} />
+                    <SwipeableItem key={item.id} item={item} onDelete={confirmDelete} />
                   )
                 )}
               </View>
@@ -295,9 +306,15 @@ const styles = StyleSheet.create({
   expenseAmount: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginBottom: 4 },
   expenseTime: { color: '#6AAD6A', fontSize: 12 },
   webDeleteBtn: {
-    marginLeft: 12, backgroundColor: 'rgba(239,68,68,0.15)',
-    borderRadius: 10, padding: 8,
-    alignItems: 'center', justifyContent: 'center',
+    marginLeft: 12,
+    backgroundColor: 'rgba(239,68,68,0.15)',
+    borderRadius: 10,
+    padding: 10,
+    minWidth: 40,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
   },
   webDeleteIcon: { fontSize: 16 },
   emptyState: { alignItems: 'center', paddingVertical: 60 },

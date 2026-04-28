@@ -7,6 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './config/firebase';
 
 import Login from './screens/Login';
+import Landing from './screens/Landing';
 import Home from './screens/Home';
 import AddExpense from './screens/AddExpense';
 import EditExpense from './screens/EditExpense';
@@ -47,7 +48,10 @@ export default function App() {
               <Stack.Screen name="Profile" component={Profile} />
             </>
           ) : (
-            <Stack.Screen name="Login" component={Login} />
+            <>
+              <Stack.Screen name="Landing" component={Landing} />
+              <Stack.Screen name="Login" component={Login} />
+            </>
           )}
         </Stack.Navigator>
       </NavigationContainer>

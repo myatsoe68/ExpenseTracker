@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator, ScrollView,
+  TextInput, Alert, ActivityIndicator, ScrollView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut, updatePassword, updateProfile } from 'firebase/auth';
@@ -77,10 +77,22 @@ const Profile = ({ navigation }) => {
   };
 
   const handleLogout = async () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: () => signOut(auth) },
-    ]);
+    try {
+      if (Platform.OS === 'web') {
+        const shouldLogout = window.confirm('Are you sure you want to logout?');
+        if (!shouldLogout) return;
+      } else {
+        Alert.alert('Logout', 'Are you sure you want to logout?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Logout', style: 'destructive', onPress: async () => signOut(auth) },
+        ]);
+        return;
+      }
+
+      await signOut(auth);
+    } catch (error) {
+      Alert.alert('Error', error.message || 'Failed to log out');
+    }
   };
 
   return (
